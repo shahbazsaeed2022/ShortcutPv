@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f1020">
+<title>Shortcuts</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#fff}
+body{background:radial-gradient(circle at 15% 10%,#5b3df5 0,transparent 45%),radial-gradient(circle at 85% 90%,#06b6d4 0,transparent 45%),#0f1020;background-attachment:fixed;padding:16px 16px 110px}
+h1{font-size:22px;margin:8px 4px 4px}
+.sub{opacity:.6;font-size:13px;margin:0 4px 16px}
+.search{width:100%;padding:12px 16px;border-radius:14px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:#fff;font-size:15px;outline:none;backdrop-filter:blur(14px);margin-bottom:16px}
+.search::placeholder{color:rgba(255,255,255,.5)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:14px}
+.tile{position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 6px;border-radius:18px;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.16);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);cursor:pointer;user-select:none;transition:transform .12s}
+.tile:active{transform:scale(.94)}
+.x{position:absolute;top:4px;right:4px;width:24px;height:24px;border:0;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;font-size:11px;padding:0;line-height:24px}
+.sh{position:absolute;top:4px;left:4px;width:24px;height:24px;border:0;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;font-size:12px;padding:0;line-height:24px}
+#toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%);background:rgba(0,0,0,.8);color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;z-index:20;display:none}
+.ico{width:58px;height:58px;border-radius:14px;display:grid;place-items:center;font-size:28px;overflow:hidden;background:linear-gradient(135deg,rgba(255,255,255,.2),rgba(255,255,255,.05))}
+.ico img{width:100%;height:100%;object-fit:cover}
+.name{font-size:12px;text-align:center;width:100%;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;line-height:1.25}
+.empty{text-align:center;opacity:.6;margin-top:60px;line-height:1.7}
+.fab{position:fixed;right:20px;bottom:calc(20px + env(safe-area-inset-bottom));padding:16px 22px;border:0;border-radius:20px;font-size:16px;font-weight:600;color:#fff;background:linear-gradient(135deg,#7c5cff,#06b6d4);box-shadow:0 10px 30px rgba(0,0,0,.4)}
+.fab:active{transform:scale(.95)}
+#viewer{position:fixed;inset:0;background:rgba(8,8,18,.96);display:none;flex-direction:column;z-index:10}
+#viewer.show{display:flex}
+.bar{display:flex;align-items:center;gap:8px;padding:12px;background:rgba(255,255,255,.07);backdrop-filter:blur(14px)}
+.bar .t{flex:1;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn{border:0;border-radius:12px;padding:10px 14px;background:rgba(255,255,255,.14);color:#fff;font-size:14px}
+.btn.red{background:rgba(255,70,90,.35)}
+.stage{flex:1;display:grid;place-items:center;overflow:auto;padding:8px}
+.stage img,.stage video{max-width:100%;max-height:100%;border-radius:10px}
+.stage audio{width:90%}
+.stage iframe{width:100%;height:100%;border:0;background:#fff;border-radius:8px}
+.stage pre{white-space:pre-wrap;word-break:break-word;width:100%;align-self:start;font-size:14px;line-height:1.5}
+.nopv{text-align:center;line-height:1.8}
+</style>
+</head>
+<body>
+<h1>📁 Mere Shortcuts</h1>
+<p class="sub">Tap karo aur file khul jayegi</p>
+<input class="search" id="q" placeholder="Search…">
+<div class="grid" id="grid"></div>
+<div class="empty" id="empty" style="display:none">Abhi kuch nahi hai 🙂<br>Neeche <b>+ Add</b> dabao aur apni files chuno</div>
+<button class="fab" id="add">+ Add</button>
+<input type="file" id="pick" multiple hidden>
+<div id="toast"></div>
+
+<div id="viewer">
+  <div class="bar">
+    <button class="btn" id="back">← Back</button>
+    <div class="t" id="vt"></div>
+    <button class="btn" id="open">Open</button>
+    <button class="btn" id="ext">Share</button>
+    <button class="btn red" id="del">🗑</button>
+  </div>
+  <div class="stage" id="stage"></div>
+</div>
+
+<script>
+const DB='shortcuts-db',ST='files';
+const open_=()=>new Promise((res,rej)=>{const r=indexedDB.open(DB,1);r.onupgradeneeded=()=>r.result.createObjectStore(ST,{keyPath:'id',autoIncrement:true});r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+const tx=async(m,fn)=>{const db=await open_();return new Promise((res,rej)=>{const t=db.transaction(ST,m),s=t.objectStore(ST),r=fn(s);t.oncomplete=()=>res(r&&r.result);t.onerror=()=>rej(t.error)})};
+const all=()=>tx('readonly',s=>s.getAll());
+const put=o=>tx('readwrite',s=>s.add(o));
+const rm=id=>tx('readwrite',s=>s.delete(id));
+
+const $=id=>document.getElementById(id);
+let items=[],cur=null,curUrl=null;
+
+const kind=f=>{const t=f.type||'',n=f.name.toLowerCase();
+  if(t.startsWith('image/'))return'image';if(t.startsWith('video/'))return'video';if(t.startsWith('audio/'))return'audio';
+  if(t==='application/pdf'||n.endsWith('.pdf'))return'pdf';
+  if(/\.(html?|xhtml|svg)$/.test(n)||t==='text/html'||t==='image/svg+xml')return'web';
+  if(t.startsWith('text/')||/\.(txt|md|json|csv|js|css|php|log|xml)$/.test(n))return'text';return'other'};
+const emoji={image:'🖼️',video:'🎬',audio:'🎵',pdf:'📕',text:'📄',web:'🌐',other:'📦'};
+const webType=n=>/\.svg$/i.test(n)?'image/svg+xml':'text/html';
+function openWeb(it){
+  const b=new Blob([it.blob],{type:webType(it.name)});
+  const u=URL.createObjectURL(b);
+  const w=window.open(u,'_blank');
+  if(!w){const a=document.createElement('a');a.href=u;a.target='_blank';a.rel='noopener';a.click()}
+}
+
+async function render(){
+  items=await all();
+  const q=$('q').value.toLowerCase();
+  const list=items.filter(i=>i.name.toLowerCase().includes(q));
+  $('empty').style.display=items.length?'none':'block';
+  const g=$('grid');g.innerHTML='';
+  list.forEach(it=>{
+    const d=document.createElement('div');d.className='tile';
+    const k=kind({type:it.blob.type||'',name:it.name});
+    const ico=document.createElement('div');ico.className='ico';
+    if(k==='image'){const im=document.createElement('img');im.src=URL.createObjectURL(it.blob);ico.appendChild(im)}else ico.textContent=emoji[k];
+    const n=document.createElement('div');n.className='name';n.textContent=it.name;
+    const x=document.createElement('button');x.className='x';x.textContent='✕';
+    x.onclick=async e=>{e.stopPropagation();if(confirm('"'+it.name+'" ka shortcut hata du?')){await rm(it.id);render()}};
+    const sb=document.createElement('button');sb.className='sh';sb.textContent='⤴';sb.onclick=e=>{e.stopPropagation();shareItem(it)};
+    d.append(sb,x,ico,n);d.onclick=()=>k==='web'?openWeb(it):show(it);g.appendChild(d);
+  });
+}
+
+function show(it){
+  cur=it;if(curUrl)URL.revokeObjectURL(curUrl);
+  curUrl=URL.createObjectURL(it.blob);
+  const f=new File([it.blob],it.name,{type:it.blob.type});const k=kind(f);
+  $('vt').textContent=it.name;const s=$('stage');s.innerHTML='';
+  let el;
+  if(k==='image'){el=document.createElement('img');el.src=curUrl}
+  else if(k==='video'){el=document.createElement('video');el.src=curUrl;el.controls=true;el.playsInline=true}
+  else if(k==='audio'){el=document.createElement('audio');el.src=curUrl;el.controls=true}
+  else if(k==='text'){el=document.createElement('pre');it.blob.text().then(t=>el.textContent=t)}
+  else if(k==='pdf'){el=document.createElement('div');el.className='nopv';el.innerHTML='PDF yaha preview nahi hoti.<br>Upar <b>Open</b> ya <b>Share</b> dabao 👆'}
+  else{el=document.createElement('div');el.className='nopv';el.innerHTML='Is file ka preview nahi hai.<br>Upar <b>Open</b> ya <b>Share</b> dabao 👆'}
+  s.appendChild(el);$('viewer').classList.add('show');history.pushState({v:1},'');
+}
+function close_(){$('viewer').classList.remove('show');$('stage').innerHTML='';cur=null}
+$('back').onclick=()=>history.state&&history.state.v?history.back():close_();
+window.onpopstate=close_;
+
+async function shareItem(it){
+  const type=it.blob.type||'application/octet-stream';
+  const f=new File([it.blob],it.name,{type});
+  try{
+    if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:it.name});return}
+  }catch(e){if(e.name==='AbortError')return}
+  const u=URL.createObjectURL(it.blob);const a=document.createElement('a');a.href=u;a.download=it.name;a.click();
+  toast('Share is browser me support nahi — file download ho gayi');
+}
+$('ext').onclick=()=>cur&&shareItem(cur);
+$('open').onclick=()=>{
+  if(!cur)return;
+  const u=URL.createObjectURL(new Blob([cur.blob],{type:cur.blob.type||'application/octet-stream'}));
+  const w=window.open(u,'_blank');
+  if(!w){const a=document.createElement('a');a.href=u;a.target='_blank';a.rel='noopener';a.click()}
+};
+$('del').onclick=async()=>{if(cur&&confirm('Ye shortcut hata du?')){await rm(cur.id);history.back();render()}};
+
+$('add').onclick=()=>$('pick').click();
+$('pick').onchange=async e=>{
+  for(const f of e.target.files){await put({name:f.name,blob:f,added:Date.now()})}
+  e.target.value='';render();
+};
+$('q').oninput=render;
+if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();
+render();
+
+function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display='none',2800)}
+async function pullInbox(){
+  if(!window.caches)return;
+  try{
+    const c=await caches.open('share-inbox');const keys=await c.keys();let n=0;
+    for(const k of keys){
+      const r=await c.match(k);if(!r)continue;
+      const name=decodeURIComponent(r.headers.get('x-name')||'shared-file');
+      const blob=await r.blob();
+      await put({name,blob,added:Date.now()});await c.delete(k);n++;
+    }
+    if(n){await render();toast(n+' file shortcuts me add ho gayi ✅')}
+  }catch(e){}
+}
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+  navigator.serviceWorker.addEventListener('message',e=>{if(e.data==='inbox')pullInbox()});
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)pullInbox()});
+pullInbox();
+if(location.search.includes('shared'))history.replaceState({},'',location.pathname);
+</script>
+</body>
+</html>
